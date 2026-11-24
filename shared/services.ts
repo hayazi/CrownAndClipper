@@ -5,6 +5,7 @@ export interface BarberService {
   priceAud: number;
   description: string;
   popular?: boolean;
+  active?: boolean;
 }
 
 export const STUDIO_INFO = {
@@ -28,6 +29,7 @@ export const BARBER_SERVICES: BarberService[] = [
     priceAud: 65,
     description: 'Foil zero fade, tailored scissor top, hot towel refresh, and matte styling.',
     popular: true,
+    active: true,
   },
   {
     id: 'classic-cut',
@@ -35,6 +37,7 @@ export const BARBER_SERVICES: BarberService[] = [
     durationMin: 30,
     priceAud: 55,
     description: 'Clean clipper or full scissor cut finished with tapered edges and straight razor neck.',
+    active: true,
   },
   {
     id: 'cut-beard',
@@ -43,6 +46,7 @@ export const BARBER_SERVICES: BarberService[] = [
     priceAud: 85,
     description: 'Full haircut or fade paired with beard shaping, razor line-up, and cedarwood oil.',
     popular: true,
+    active: true,
   },
   {
     id: 'beard-lineup',
@@ -50,6 +54,7 @@ export const BARBER_SERVICES: BarberService[] = [
     durationMin: 30,
     priceAud: 40,
     description: 'Graduated beard sculpt, crisp cheek and neck razor work, and hot towel finish.',
+    active: true,
   },
   {
     id: 'buzz-taper',
@@ -57,6 +62,7 @@ export const BARBER_SERVICES: BarberService[] = [
     durationMin: 30,
     priceAud: 45,
     description: 'Single-grade clipper cut with blended temple and nape taper for an easy reset.',
+    active: true,
   },
 ];
 

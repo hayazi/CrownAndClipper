@@ -1,4 +1,5 @@
-import { getServiceById, type BarberService } from '../shared/services.ts';
+import { type BarberService } from '../shared/services.ts';
+import { getActiveServiceById, type ServiceMutationInput } from './studioStore.ts';
 import {
   addDaysToDateStr,
   getStudioHoursForSydneyDate,
@@ -89,9 +90,9 @@ export function validateBookingPayload(body: unknown): {
   if (typeof record.serviceId !== 'string') {
     return { ok: false, error: 'Please select a service.' };
   }
-  const service = getServiceById(record.serviceId);
+  const service = getActiveServiceById(record.serviceId);
   if (!service) {
-    return { ok: false, error: 'Selected service was not found.' };
+    return { ok: false, error: 'Selected service was not found or is inactive.' };
   }
 
   if (record.consentAccepted !== true) {
@@ -153,3 +154,63 @@ export function validateBookingPayload(body: unknown): {
     },
   };
 }
+
+export function validateServiceMutationPayload(body: unknown): {
+  ok: true;
+  data: ServiceMutationInput;
+} | {
+  ok: false;
+  error: string;
+} {
+  if (!body || typeof body !== 'object') {
+    return { ok: false, error: 'Invalid service payload.' };
+  }
+
+  const record = body as Record<string, unknown>;
+  const name = sanitizePlainText(record.name);
+  if (name.length < 2 || name.length > 60) {
+    return { ok: false, error: 'Service name must be between 2 and 60 characters.' };
+  }
+
+  const durationMin = Number(record.durationMin);
+  if (
+    !Number.isInteger(durationMin) ||
+    durationMin < 15 ||
+    durationMin > 180 ||
+    durationMin % 15 !== 0
+  ) {
+    return {
+      ok: false,
+      error: 'Duration must be a multiple of 15 minutes (15 to 180 min).',
+    };
+  }
+
+  const priceAud = Number(record.priceAud);
+  if (!Number.isFinite(priceAud) || priceAud < 0 || priceAud > 999) {
+    return { ok: false, error: 'AUD price must be between $0 and $999.' };
+  }
+
+  const description = sanitizePlainText(record.description);
+  if (description.length < 8 || description.length > 240) {
+    return {
+      ok: false,
+      error: 'Description must be between 8 and 240 characters.',
+    };
+  }
+
+  const popular = Boolean(record.popular);
+  const active = record.active === undefined ? true : Boolean(record.active);
+
+  return {
+    ok: true,
+    data: {
+      name,
+      durationMin,
+      priceAud: Math.round(priceAud),
+      description,
+      popular,
+      active,
+    },
+  };
+}
+

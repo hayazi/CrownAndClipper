@@ -3,8 +3,14 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { BARBER_SERVICES, getServiceById, STUDIO_INFO } from './shared/services.ts';
+import { STUDIO_INFO } from './shared/services.ts';
 import { getNextSydneyDays, SYDNEY_TIMEZONE } from './shared/sydneyTime.ts';
+import {
+  authenticateAdminLogin,
+  bootstrapAdminCredentials,
+  getAdminAuthStatus,
+  verifyAdminBearerToken,
+} from './server/adminAuth.ts';
 import {
   BookingConflictError,
   createBookingWithConflictGuard,
@@ -14,7 +20,18 @@ import {
   GoogleCalendarUpstreamError,
   resetMockBookings,
 } from './server/calendarService.ts';
-import { validateBookingPayload, validateSydneyDateStr } from './server/validation.ts';
+import {
+  createStudioService,
+  getActiveServiceById,
+  getAllServices,
+  getPublicServices,
+  updateStudioService,
+} from './server/studioStore.ts';
+import {
+  validateBookingPayload,
+  validateServiceMutationPayload,
+  validateSydneyDateStr,
+} from './server/validation.ts';
 
 process.env.TZ = SYDNEY_TIMEZONE;
 
@@ -45,7 +62,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Booking-Mode');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
     }
   }
 
@@ -80,7 +97,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 app.get('/api/studio', (_req: Request, res: Response) => {
   res.json({
     studio: STUDIO_INFO,
-    services: BARBER_SERVICES,
+    services: getPublicServices(),
     days: getNextSydneyDays(14),
     capabilities: getServerCalendarCapabilities(),
   });
@@ -94,9 +111,9 @@ app.get('/api/calendar/slots', async (req: Request, res: Response) => {
   }
 
   const serviceId = typeof req.query.serviceId === 'string' ? req.query.serviceId : '';
-  const service = getServiceById(serviceId);
+  const service = getActiveServiceById(serviceId);
   if (!service) {
-    res.status(400).json({ error: 'Valid serviceId is required.' });
+    res.status(400).json({ error: 'Valid active serviceId is required.' });
     return;
   }
 
@@ -154,7 +171,7 @@ app.post('/api/calendar/bookings', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/calendar/mock-reset', (req: Request, res: Response) => {
+app.post('/api/calendar/mock-reset', (_req: Request, res: Response) => {
   const caps = getServerCalendarCapabilities();
   if (isProduction && caps.defaultMode === 'live') {
     res.status(403).json({ error: 'Mock reset is disabled in live production mode.' });
@@ -162,6 +179,82 @@ app.post('/api/calendar/mock-reset', (req: Request, res: Response) => {
   }
   resetMockBookings();
   res.json({ ok: true });
+});
+
+function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
+  const token = extractBearerToken(req);
+  const payload = verifyAdminBearerToken(token);
+  if (!payload) {
+    res.status(401).json({ error: 'Admin sign-in required or session expired.' });
+    return;
+  }
+  next();
+}
+
+app.get('/api/admin/status', (_req: Request, res: Response) => {
+  res.json(getAdminAuthStatus());
+});
+
+app.post('/api/admin/bootstrap', (req: Request, res: Response) => {
+  const result = bootstrapAdminCredentials(req.body?.username, req.body?.password);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.status(201).json(result.session);
+});
+
+app.post('/api/admin/login', (req: Request, res: Response) => {
+  const result = authenticateAdminLogin(req.body?.username, req.body?.password);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json(result.session);
+});
+
+app.get('/api/admin/services', requireAdminAuth, (_req: Request, res: Response) => {
+  res.json({ services: getAllServices() });
+});
+
+app.post('/api/admin/services', requireAdminAuth, (req: Request, res: Response) => {
+  const validated = validateServiceMutationPayload(req.body);
+  if (!validated.ok) {
+    res.status(400).json({ error: validated.error });
+    return;
+  }
+  const created = createStudioService(validated.data);
+  res.status(201).json({
+    service: created,
+    services: getAllServices(),
+    publicServices: getPublicServices(),
+  });
+});
+
+app.put('/api/admin/services/:id', requireAdminAuth, (req: Request, res: Response) => {
+  const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  if (!/^[a-z0-9-]{1,60}$/.test(id)) {
+    res.status(400).json({ error: 'Invalid service identifier.' });
+    return;
+  }
+
+  const validated = validateServiceMutationPayload(req.body);
+  if (!validated.ok) {
+    res.status(400).json({ error: validated.error });
+    return;
+  }
+
+  const updated = updateStudioService(id, validated.data);
+  if (!updated) {
+    res.status(404).json({ error: 'Service not found.' });
+    return;
+  }
+
+  res.json({
+    service: updated,
+    services: getAllServices(),
+    publicServices: getPublicServices(),
+  });
 });
 
 async function startServer() {

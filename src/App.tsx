@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Instagram,
   Loader2,
+  Lock,
   MapPin,
   RefreshCw,
   Server,
@@ -21,6 +22,7 @@ import {
   getSydneyZoneLabel,
   type SydneyDayOption,
 } from '../shared/sydneyTime';
+import { AdminModal } from './components/AdminModal';
 import { BookingConfirmModal } from './components/BookingConfirmModal';
 import { CloudSetupModal } from './components/CloudSetupModal';
 import { PolicyModal, type PolicyTab } from './components/PolicyModal';
@@ -31,6 +33,7 @@ import {
   fetchStudioBootstrap,
   resetMockSchedule,
   submitBooking,
+  type AdminSessionResponse,
   type BookingMode,
   type StudioBootstrapResponse,
 } from './lib/bookingApi';
@@ -87,10 +90,12 @@ export default function App() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [confirmedBooking, setConfirmedBooking] = useState<ConfirmedBooking | null>(null);
 
-  // Modals
+  // Modals & Admin Session (in-memory only)
   const [policyModalOpen, setPolicyModalOpen] = useState<boolean>(false);
   const [policyTab, setPolicyTab] = useState<PolicyTab>('terms');
   const [setupModalOpen, setSetupModalOpen] = useState<boolean>(false);
+  const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [adminSession, setAdminSession] = useState<AdminSessionResponse | null>(null);
 
   const checkoutRef = useRef<HTMLDivElement | null>(null);
 
@@ -172,11 +177,21 @@ export default function App() {
     } finally {
       setSlotsLoading(false);
     }
-  }, [selectedDateStr, selectedServiceId, mode, accessToken]);
+  }, [selectedDateStr, selectedServiceId, selectedService?.durationMin, mode, accessToken]);
 
   useEffect(() => {
     loadSlots();
   }, [loadSlots]);
+
+  const handlePublicServicesUpdated = useCallback((updatedServices: BarberService[]) => {
+    setServices(updatedServices);
+    setConfirmedBooking(null);
+    if (updatedServices.length > 0) {
+      setSelectedServiceId((prev) =>
+        updatedServices.some((s) => s.id === prev) ? prev : updatedServices[0].id,
+      );
+    }
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -353,6 +368,13 @@ export default function App() {
               className="hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               Cloud Setup
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminModalOpen(true)}
+              className="hover:text-stone-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              Admin
             </button>
           </nav>
 
@@ -1145,6 +1167,14 @@ export default function App() {
               <Server className="w-3.5 h-3.5" />
               <span>Barber Calendar &amp; Cloud Run Setup</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setAdminModalOpen(true)}
+              className="inline-flex items-center gap-1.5 font-medium text-stone-700 hover:text-stone-900 transition-colors"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Studio Admin</span>
+            </button>
           </div>
         </div>
       </footer>
@@ -1183,6 +1213,14 @@ export default function App() {
         onGoogleSignIn={handleGoogleSignIn}
         onGoogleSignOut={handleGoogleSignOut}
         onResetMock={handleResetMock}
+      />
+
+      <AdminModal
+        open={adminModalOpen}
+        onClose={() => setAdminModalOpen(false)}
+        session={adminSession}
+        onSessionChange={setAdminSession}
+        onPublicServicesUpdated={handlePublicServicesUpdated}
       />
     </div>
   );

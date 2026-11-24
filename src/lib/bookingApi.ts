@@ -126,3 +126,122 @@ export async function submitBooking(params: {
 export async function resetMockSchedule(): Promise<void> {
   await fetch('/api/calendar/mock-reset', { method: 'POST' });
 }
+
+export interface AdminAuthStatusResponse {
+  configured: boolean;
+  source: 'env' | 'claimed' | 'unclaimed';
+}
+
+export interface AdminSessionResponse {
+  token: string;
+  expiresAt: number;
+  username: string;
+}
+
+export interface ServiceFormPayload {
+  name: string;
+  durationMin: number;
+  priceAud: number;
+  description: string;
+  popular: boolean;
+  active: boolean;
+}
+
+export async function fetchAdminStatus(): Promise<AdminAuthStatusResponse> {
+  const res = await fetch('/api/admin/status');
+  if (!res.ok) {
+    throw new ApiRequestError('Unable to check admin status.', res.status);
+  }
+  return (await res.json()) as AdminAuthStatusResponse;
+}
+
+export async function bootstrapAdmin(params: {
+  username: string;
+  password: string;
+}): Promise<AdminSessionResponse> {
+  const res = await fetch('/api/admin/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const body = (await res.json()) as AdminSessionResponse & { error?: string };
+  if (!res.ok || !body.token) {
+    throw new ApiRequestError(body.error || 'Could not claim admin access.', res.status);
+  }
+  return body;
+}
+
+export async function loginAdmin(params: {
+  username: string;
+  password: string;
+}): Promise<AdminSessionResponse> {
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const body = (await res.json()) as AdminSessionResponse & { error?: string };
+  if (!res.ok || !body.token) {
+    throw new ApiRequestError(body.error || 'Invalid username or password.', res.status);
+  }
+  return body;
+}
+
+export async function fetchAdminServices(adminToken: string): Promise<BarberService[]> {
+  const res = await fetch('/api/admin/services', {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const body = (await res.json()) as { services?: BarberService[]; error?: string };
+  if (!res.ok || !body.services) {
+    throw new ApiRequestError(body.error || 'Unable to load services.', res.status);
+  }
+  return body.services;
+}
+
+export async function createAdminService(
+  adminToken: string,
+  payload: ServiceFormPayload,
+): Promise<{ services: BarberService[]; publicServices: BarberService[] }> {
+  const res = await fetch('/api/admin/services', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = (await res.json()) as {
+    services?: BarberService[];
+    publicServices?: BarberService[];
+    error?: string;
+  };
+  if (!res.ok || !body.services || !body.publicServices) {
+    throw new ApiRequestError(body.error || 'Unable to create service.', res.status);
+  }
+  return { services: body.services, publicServices: body.publicServices };
+}
+
+export async function updateAdminService(
+  adminToken: string,
+  serviceId: string,
+  payload: ServiceFormPayload,
+): Promise<{ services: BarberService[]; publicServices: BarberService[] }> {
+  const res = await fetch(`/api/admin/services/${encodeURIComponent(serviceId)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = (await res.json()) as {
+    services?: BarberService[];
+    publicServices?: BarberService[];
+    error?: string;
+  };
+  if (!res.ok || !body.services || !body.publicServices) {
+    throw new ApiRequestError(body.error || 'Unable to update service.', res.status);
+  }
+  return { services: body.services, publicServices: body.publicServices };
+}
+
