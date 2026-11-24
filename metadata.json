@@ -1,0 +1,6 @@
+{
+  "name": "Crown & Clipper — Sydney Barber Booking",
+  "description": "Mobile-first appointment booking for Crown & Clipper in Surry Hills, Sydney. Live Australia/Sydney Google Calendar availability, double-booking protection, and APP-aligned privacy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
